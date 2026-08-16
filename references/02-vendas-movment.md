@@ -86,7 +86,7 @@ AND mov.produto_id NOT IN (
 ```
 
 - `oper IN (2, 3)` — venda normal + venda com receita.
-- Exclusão de filial `1` (ESCRITORIO) e `999` (registro técnico).
+- Exclusão de filial `1` (costuma ser o escritório) e `999` (registro técnico).
 - **Exclusão do produto de arredondamento é obrigatória** em qualquer query de vendas: produtos
   `ARREDOND` existem só para ajustar o troco e não devem entrar em faturamento, contagem de
   clientes, IPC nem em nenhum outro KPI.
@@ -248,13 +248,18 @@ ver `05-clientes-crm.md` e `08-armadilhas.md`.
 ## Agrupamentos de produto usados em vendas
 
 - Quebra por **Referência / Perfumaria / Genérico / Outros** é feita por listas fixas de
-  `produto.grupo_id`, com o `%` calculado sobre a venda líquida da própria linha.
-- **As listas de `grupo_id` divergem entre relatórios** (ex.: `66001` está em "Referência" em um
-  relatório e não em outro; `3001`/`3002` só existem em "Outros" de um deles). Essa divergência é
-  proposital quando o objetivo é bater número a número com um relatório Pentaho de referência —
-  **não "padronizar" listas de grupo entre relatórios sem pedido explícito do gestor.**
-- **Marca própria da rede:** produtos com `produto.espec_id = 257001` — confirmado no ERP como
-  **"SUPRA ENERGY"**. Métrica "Marca" = `SUM(quanti_uni)` desses produtos.
+  `produto.grupo_id`, com o `%` calculado sobre a venda líquida da própria linha. **As listas em si
+  são do cadastro de cada cliente** (`grupo`), não do ERP — levantar com
+  `SELECT grupo_id, descricao, desc_arvore FROM grupo`.
+- **As listas de `grupo_id` costumam divergir entre relatórios da mesma instalação** (um `grupo_id`
+  que entra em "Referência" num relatório e não em outro; grupos que só existem em "Outros" de um
+  deles). Quando o objetivo é bater número a número com um relatório de referência já existente, a
+  divergência é proposital — **não "padronizar" listas de grupo entre relatórios sem pedido
+  explícito do cliente.**
+- **Marca própria da rede:** identificada por `produto.espec_id`. A métrica "Marca" é
+  `SUM(quanti_uni)` dos produtos com esse `espec_id`. **Qual valor de `espec_id` é a marca própria
+  é cadastro de cada cliente** — conferir na base antes de usar (exemplo de valor real em
+  `01-visao-geral.md`, "Exemplo de uma instalação").
 
 ---
 

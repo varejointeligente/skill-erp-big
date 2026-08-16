@@ -11,7 +11,7 @@ Sumário:
 - [Consumindo o ERP via aplicação](#consumindo-o-erp-via-aplicação)
   - [Serialização de BigInt](#serialização-de-bigint)
   - [Fuso horário −03:00 nos filtros de data](#fuso-horário-0300-nos-filtros-de-data)
-  - [`hourCycle: "h23"` ao montar data como texto para SQL](#hourcycle-h23-ao-montar-data-como-texto-para-sql)
+  - [Data montada como texto para embutir no SQL](#data-montada-como-texto-para-embutir-no-sql)
   - [Cláusulas `IN` dinâmicas](#cláusulas-in-dinâmicas)
 
 ---
@@ -125,8 +125,9 @@ processa **filial por filial, sequencialmente**, nunca uma query cruzando a rede
 
 Um contador derivado pode ser calculado **em memória, a partir de dados já carregados**, em vez de
 ganhar uma rota/query própria. Caso real: um contador de "falta real" ganhou primeiro uma rota
-dedicada que rodava até 4 round-trips × 11 filiais; mesmo depois de reduzida a "só quem tem caixa
-no período", ela variou de **3,6s a 6,7 minutos** dependendo do que mais estivesse rodando
+dedicada que rodava até 4 round-trips por filial, em todas as filiais da rede; mesmo depois de
+reduzida a "só quem tem caixa no período", ela variou de **3,6s a 6,7 minutos** dependendo do que
+mais estivesse rodando
 (contenção do pool). A solução definitiva foi eliminar a rota e derivar o número dos dados já em
 memória — zero query nova.
 
@@ -222,27 +223,19 @@ Regras relacionadas:
 - **Nunca validar fuso apenas em ambiente local:** a máquina de desenvolvimento normalmente já
   está no fuso de Brasília e mascara exatamente esse tipo de bug.
 
-### `hourCycle: "h23"` ao montar data como texto para SQL
+### Data montada como texto para embutir no SQL
 
-Ao montar `'YYYY-MM-DD HH:MM:SS'` como texto para embutir na query:
+Quando o filtro de data é montado como string `'YYYY-MM-DD HH:MM:SS'` e embutido na query, uma
+hora fora da faixa `00`–`23` (ex.: `'2026-07-21 24:59:19'`) faz o MariaDB **não casar nada**: sem
+erro, sem log, o `BETWEEN` simplesmente devolve zero linhas.
 
-```ts
-// ✅ CORRETO — só hourCycle, sem hour12
-new Intl.DateTimeFormat("en-CA", {
-  timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23", /* ... */
-}).formatToParts(value)
-```
+**Bug real (2026-08-04):** a coluna "Diferença Fechamento" saía em branco em produção **só** para
+os caixas que fecham entre 00:00 e 00:59 — a hora da meia-noite estava sendo formatada como `"24"`
+em vez de `"00"` na hora de montar a string.
 
-**Bug real (2026-08-04):** em certas builds de Node/ICU (confirmado no servidor, não reproduz
-localmente), a hora da meia-noite (00:00–00:59) é formatada como **`"24"` em vez de `"00"`**, sem
-ajustar o dia — gerando uma data inválida (`'2026-07-21 24:59:19'`). O MariaDB não compara isso
-corretamente e a query retorna zero linhas, deixando a coluna vazia **só para caixas que fecham
-entre 00:00 e 00:59**.
-
-**Primeira tentativa de correção falhou:** adicionar `hourCycle: "h23"` **mantendo
-`hour12: false`** não resolve — pela spec ECMA-402, **`hour12` tem precedência sobre `hourCycle`**
-quando ambos estão presentes e sobrescreve silenciosamente a correção. **Nunca escrever
-`hour12: false` e `hourCycle` juntos** — usar só `hourCycle: "h23"`.
+**Como evitar:** conferir a string gerada antes de culpar o dado (validar a hora em `00`–`23`), ou
+passar a data como parâmetro vinculado em vez de texto. Um sintoma que atinge só uma faixa de
+horário é quase sempre a string do filtro, não o registro no ERP.
 
 ### Cláusulas `IN` dinâmicas
 

@@ -25,7 +25,6 @@ Sumário:
 | `telefone1` | Telefone 1 |
 | `telefone2` | Telefone 2 |
 | `dtcadastro` | Data de cadastro — **usa sentinela `1000-01-01`** (ver abaixo) |
-| `sexo` | Gênero (usado para segmentação) |
 
 ### `dtcadastro` com sentinela `1000-01-01`
 
@@ -88,8 +87,9 @@ exclui `ARREDOND` (sim, sempre)? — não assumir.
 
 ## Perfil R.F.V. (Recência, Frequência, Valor)
 
-Regra de negócio obtida por engenharia reversa de um CRM externo (Triv.io) e validada com dados
-reais. O cálculo é **derivado**, não existe pronto no ERP.
+**Nada disso é do ERP Big.** A regra foi obtida por engenharia reversa de um CRM externo e
+validada com dados reais; o cálculo é **derivado** e vive fora do ERP. Os limiares e o
+recorte são configuração de projeto — em outro cliente podem ser outros.
 
 ### Regra central: calculado em LOTE (rede toda), nunca ao vivo
 
@@ -102,8 +102,9 @@ reais. O cálculo é **derivado**, não existe pronto no ERP.
 - **Processado filial por filial, sequencialmente** — nunca uma query cruzando a rede inteira de
   uma vez (mesmo padrão validado para a Diferença de Fechamento). Uma filial que falhar é pulada,
   sem abortar o lote.
-- **Volume medido com dados reais** (rede toda, 11 filiais operacionais): ~**62.184 entidades
-  ativas** (compraram nos últimos 365 dias); lote completo em **~16–40s**.
+- **Ordem de grandeza medida numa instalação real** (rede inteira, 12 filiais operacionais):
+  ~**62.184 entidades ativas** (compraram nos últimos 365 dias); lote completo em **~16–40s**.
+  Serve para dimensionar, não como número esperado em outro cliente.
 - **Concorrência:** um novo disparo deve ser bloqueado enquanto houver execução em andamento há
   menos de 20 minutos — evita dois lotes simultâneos martelando o pool de conexões do ERP.
 
@@ -127,14 +128,14 @@ O segmento **"Recente"** (R alto + FM baixo) foi implementado por simetria com "
 
 ### Tags de fidelização — Fiel / Potencial (limiares editáveis)
 
-Defaults confirmados:
+Defaults de **uma** instalação (parâmetro de negócio do cliente, não regra do ERP):
 
 | Tag | Critérios (todos) |
 | --- | --- |
 | **Fiel** | tempo de relacionamento ≥ **180 dias**, ≥ **4 vendas em 6 meses**, recência ≤ **60 dias**, gasto em 6 meses ≥ **R$ 300** |
 | **Potencial** | recência ≤ **45 dias**, gasto em 6 meses ≥ **R$ 200** (só testado se não for Fiel) |
 
-Os limiares nunca devem ficar hardcoded — são configuráveis.
+Os limiares nunca devem ficar hardcoded — são configuráveis, e cada cliente define os seus.
 
 ### Loja Favorita / Vendedor Favorito
 
@@ -152,9 +153,15 @@ cupons"). Não foi comparada especificamente contra a definição do CRM de orig
 
 ### O que é a "Loja WhatsApp"
 
-**Não existe filial "WhatsApp" no ERP.** São as vendas da **FILIAL 10 (`filial_id = 14`)** cujo
-orçamento foi marcado no caixa com um dos códigos `wt`, `wr`, `ct` ou `cr` em
-**`orcament.msgcaixa`** — campo de **texto livre digitado pelo operador**.
+**Não existe filial "WhatsApp" no ERP.** São vendas de uma filial específica cujo orçamento foi
+marcado no caixa com um código combinado em **`orcament.msgcaixa`** — campo de **texto livre
+digitado pelo operador**.
+
+> **Específico do cliente:** tanto os códigos usados (`wt`, `wr`, `ct`, `cr` na instalação em que
+> isso foi validado) quanto a filial de origem (`filial_id = 14`, `reduz` "FILIAL 10", naquela
+> rede) são convenção da rede, não do ERP. Confirmar os dois na base do cliente:
+> `SELECT DISTINCT msgcaixa FROM orcament WHERE msgcaixa <> ''`. O que é universal é o
+> comportamento do campo — texto livre, sujo, que exige normalização.
 
 Regras da consulta de origem (transformação Pentaho/Kettle, replicada e validada):
 
@@ -169,7 +176,7 @@ linha** no fim (`"WT\r\n"`, hex `57540D0A`) ou com o código repetido (`"wtwt"`)
 automático do MySQL cobre **espaços**, não `\r`/`\n` — então `msgcaixa IN ('wt','wr','ct','cr')`
 devolve `0` para esses registros e a venda inteira desaparece.
 
-Medido em 2026-08-07 na FILIAL 10 (`filial_id = 14`), ano de 2026: **17.264 registros limpos**
+Medido em 2026-08-07 na filial de origem daquela rede, ano de 2026: **17.264 registros limpos**
 contra **236 perdidos** (211 com `\r\n`, 18 `"wtwt"`, 4 `"wyt"`, 3 `"wf"`). Num recorte de 6 dias
 (01–06/08/2026): **129 cupons / R$ 16.669,83** (comparação exata) contra **145 cupons /
 R$ 18.395,50** (normalizado) — **9,4% da venda sumindo**.
@@ -182,14 +189,17 @@ LOWER(TRIM(REPLACE(REPLACE(orc.msgcaixa, '\r', ''), '\n', '')))
 
 ### Dois recortes diferentes que convivem de propósito
 
+Numa mesma instalação podem conviver dois recortes diferentes de "venda por WhatsApp", e trocar um
+pelo outro muda o número:
+
 | Recorte | Regra |
 | --- | --- |
-| **"Loja WhatsApp"** | `msgcaixa` normalizado ∈ (`wt`, `wr`, `ct`, `cr`), `orcament.status IN ('F','N')`, `numlanc <> 0`, 2 dias de folga, FILIAL 10 |
-| **"F 10 - WHATS"** (usado em relatórios mais antigos) | só `msgcaixa LIKE '%WT%'` — sem `wr`/`ct`/`cr`, sem folga de 2 dias, sem filtro de `status` |
+| Recorte **completo** | `msgcaixa` normalizado ∈ (todos os códigos combinados), `orcament.status IN ('F','N')`, `numlanc <> 0`, 2 dias de folga, filial de origem |
+| Recorte **legado** (relatórios mais antigos) | só `msgcaixa LIKE '%<código>%'` — um código só, sem folga de 2 dias, sem filtro de `status` |
 
-O `LIKE '%WT%'` por acaso **não sofre** do problema do `\r\n` (o `%` absorve), mas em compensação
-casa `"wtwt"` e ignora os outros 3 códigos. **São recortes diferentes — não trocar um pelo outro
-sem confirmar com o gestor qual é o esperado naquele relatório.**
+O `LIKE '%…%'` por acaso **não sofre** do problema do `\r\n` (o `%` absorve), mas em compensação
+casa o código repetido (`"wtwt"`) e ignora os demais códigos. **São recortes diferentes — não
+trocar um pelo outro sem confirmar com o cliente qual é o esperado naquele relatório.**
 
 ### Loja WhatsApp — colunas e fórmulas validadas
 
@@ -201,7 +211,7 @@ sem confirmar com o gestor qual é o esperado naquele relatório.**
 | Ticket | venda líquida ÷ cupons |
 | Referência / Perfumaria / Genérico / Outros | `SUM(valor_tot)` por listas fixas de `produto.grupo_id`, e o `%` sobre a venda líquida da própria linha |
 | CMV | custo ÷ venda líquida, custo pela cascata `mov.pmc → mov.precoee → preco_medio_custo.pmc_atual → estoque_minimo.precoee → precosfilial.preco_custo → produto.preco_cmp_un` |
-| Marca | `SUM(quanti_uni)` de produtos com `produto.espec_id = 257001` (marca própria "SUPRA ENERGY") |
+| Marca | `SUM(quanti_uni)` de produtos cujo `produto.espec_id` corresponde à marca própria da rede — **o valor do `espec_id` é cadastro do cliente** (ver `01-visao-geral.md`, "Exemplo de uma instalação") |
 | Unidades | itens vendidos ÷ cupons |
 
 **Duas consultas separadas** (vendedores e total) — nunca somar a tabela de vendedores para obter
@@ -226,7 +236,8 @@ Colunas em `movment`: `entrega` (`'S'`/`'N'`), `dtsaida_entrega` (despacho),
 linha NETA A ZERO assim que a entrega é finalizada.** Nunca usar
 `SUM(valor) WHERE troco_entrega = 'S'` sozinho para saber "quanto de troco tem essa venda".
 
-Fluxo real observado (lançamento 889722, FILIAL 6/`filial_id = 9`, 2026-07-23):
+Fluxo real observado (lançamento 889722, "Filial 9" como registrado na fonte — se é `reduz` ou
+`filial_id` não está confirmado, 2026-07-23):
 
 | Estágio | Linhas gravadas em `pagamentos` |
 | --- | --- |

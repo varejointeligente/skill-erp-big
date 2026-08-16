@@ -29,6 +29,28 @@ as regras desse ERP não são deriváveis do nome das colunas.
 Quando a tarefa cruza áreas (ex.: margem por filial no fechamento do mês), leia as duas —
 a interseção é justamente onde moram os erros.
 
+## O que aqui é do ERP e o que é de um cliente
+
+Este skill serve para **qualquer cliente que rode o ERP Big**. As referências descrevem o ERP:
+estrutura de tabela, semântica de coluna e de flag, fórmula, armadilha estrutural, comportamento
+do MariaDB. Isso vale em qualquer instalação.
+
+**Não vale em qualquer instalação**, e portanto nunca deve ser afirmado de memória:
+
+- ids de filial e quantidade de lojas — obter com `SELECT filial_id, reduz FROM filial WHERE apagado='N'`;
+- nome comercial de programa de fidelidade, apelido de loja, nome de relatório interno;
+- conteúdo de campos livres (`usuario.num_carteira`, `orcament.msgcaixa`) e o que o cliente
+  convencionou escrever neles;
+- valores de cadastro como o `espec_id` da marca própria;
+- parâmetros de negócio (tolerâncias, faixas de premiação, limiares de segmentação).
+
+Valores concretos de **uma** instalação estão isolados em `references/01-visao-geral.md`, seção
+"Exemplo de uma instalação (confirmar na base do cliente)" — servem só para mostrar o formato do
+dado. Ao atender um cliente novo, confirmar cada um deles no banco dele.
+
+O nome da base costuma ser `gerente`, mas **pode variar por instalação** — confirmar com
+`SHOW DATABASES;`.
+
 ## As cinco regras que valem para qualquer query
 
 Estas se aplicam sempre; o detalhe e o porquê estão nas referências.
@@ -89,3 +111,15 @@ num período longo.
 
 Consulta de leitura para conferir dado é livre. Qualquer coisa que **escreva** no ERP precisa de
 confirmação explícita do cliente antes — o ERP é a fonte de verdade da operação dele.
+
+## Ao escrever no ERP — `lojas_leram = '*'`
+
+O ERP Big é distribuído entre a retaguarda e as lojas, e a replicação é controlada pela coluna
+`lojas_leram` na própria linha. **Toda escrita — `INSERT`, `UPDATE` ou soft delete com
+`apagado='S'` — precisa marcar `lojas_leram = '*'` na mesma operação**, senão a alteração nunca
+chega à loja.
+
+Isso falha em silêncio: o comando retorna sucesso, a retaguarda mostra o valor novo, e a loja segue
+com o valor antigo. O sintoma aparece como "alterei e o caixa continua com o valor velho", horas ou
+dias depois. Ao escrever ou revisar qualquer script de escrita, essa é a primeira coisa a conferir.
+Detalhes e casos em `references/01-visao-geral.md`, seção "Replicação entre loja e retaguarda".

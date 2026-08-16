@@ -1,18 +1,21 @@
 # erp-big
 
 Skill do Claude com a base de conhecimento do **ERP Big** (BigPharma / Big Sistemas) — ERP de
-varejo farmacêutico, banco **MariaDB**, base `gerente`.
+varejo farmacêutico, banco **MariaDB**, base normalmente chamada `gerente` (o nome pode variar por
+instalação — confirmar com `SHOW DATABASES`).
 
-Serve para atendimento de suporte e consultoria: quando alguém pede um relatório, questiona um
-número ou pergunta "de onde sai esse campo", o Claude passa a responder a partir do que já foi
-validado contra bancos reais, em vez de deduzir pelo nome das colunas.
+Serve para atendimento de suporte e consultoria **de qualquer cliente que rode o ERP Big**: quando
+alguém pede um relatório, questiona um número ou pergunta "de onde sai esse campo", o Claude passa
+a responder a partir do que já foi validado contra bancos reais, em vez de deduzir pelo nome das
+colunas.
 
 ## Conteúdo
 
 ```
 SKILL.md                        instruções e índice das referências
 references/
-  01-visao-geral.md             convenções, flags, PKs compostas, filiais, tabela `relatorio`
+  01-visao-geral.md             convenções, flags, PKs compostas, filiais, tabela `relatorio`,
+                                exemplo de uma instalação (valores de cliente, rotulados)
   02-vendas-movment.md          movment, oper, cupom, devolução, transferência x remanejo
   03-produto-estoque.md         produto, barras, grupo, estoques, lote/validade, curva ABC
   04-precos-ofertas.md          hierarquia de preço, promoções, desconto à vista
@@ -53,11 +56,31 @@ data). É o exemplo real que faz a regra grudar; a regra abstrata sozinha é esq
 query.
 
 Áreas ainda vazias por falta de fonte: SNGPC, controlados, convênios/PBM e Farmácia Popular; os
-valores de `movment.oper` além de 2/3/8/9/10; as letras de `status_conf`. Estão marcadas como
-lacuna no glossário.
+valores de `movment.oper` além de 2/3/8/9/10; o significado de `status_conf` (só `F` e `X` estão
+comprovados — os demais valores possíveis são desconhecidos). Estão marcadas como lacuna no
+glossário.
+
+## Universal x específico de cliente
+
+A base foi escrita para servir a **qualquer instalação do ERP Big**. Vale a regra: estrutura de
+tabela, semântica de coluna/flag, fórmula e armadilha estrutural são conhecimento do ERP e ficam
+no corpo das referências; ids de filial, nomes comerciais, conteúdo de campos livres, valores de
+cadastro (ex.: o `espec_id` da marca própria) e parâmetros de negócio são configuração de **um**
+cliente e ficam isolados em `references/01-visao-geral.md`, na seção
+**"Exemplo de uma instalação (confirmar na base do cliente)"**, apenas como ilustração de formato.
+
+Ao registrar algo novo, aplicar o mesmo corte — e nunca apresentar convenção de um cliente
+("quando o gestor disser X, faça Y") como verdade do ERP.
 
 ## Origem e privacidade
 
-Destilado de documentação de projeto real de uma rede de farmácias. Nomes de pessoas foram
-substituídos por "o gestor"; não há credenciais, hosts nem IPs nos arquivos. Os IDs de exemplo
-(produto, cupom, caixa) foram mantidos porque são o que torna cada armadilha reproduzível.
+Destilado de documentação de projeto real de uma rede de farmácias, com a identidade do cliente
+removida: nomes de pessoas foram substituídos por "o gestor", e nomes comerciais da rede (programa
+de fidelidade, apelidos de loja) foram trocados pelo conceito genérico e pela coluna de origem. Não
+há credenciais, hosts nem IPs nos arquivos.
+
+Os IDs de exemplo das armadilhas (produto, cupom, caixa, lançamento, valor, data) **foram
+mantidos** — é o caso concreto que torna cada armadilha reproduzível e memorável, e a armadilha em
+si é estrutural do ERP. Já os valores de configuração de uma instalação (mapa de filiais,
+tolerâncias, faixas de premiação, `espec_id` de marca própria) estão rotulados como exemplo, não
+como regra.

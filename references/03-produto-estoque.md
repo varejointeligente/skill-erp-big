@@ -33,7 +33,7 @@ referência é `produto_id` minúsculo.
 | `receita` | Campo de **receituário** (`'N'`/`'S'`) — **nunca usar como grupo/categoria** |
 | `grupo_id` | FK para `grupo` |
 | `classe_terapeutica_id` | FK para `classe_terapeutica` |
-| `espec_id` | Especificação; `257001` = marca própria "SUPRA ENERGY" |
+| `espec_id` | Especificação do produto — usada por algumas redes para identificar a **marca própria**; o valor concreto é cadastro do cliente |
 | `preco_cmp_un` | Preço de compra unitário — **pode estar defasado** |
 | `margem` | Margem % — **pode estar defasada** |
 | `desconto_avista` | Desconto à vista — **na prática costuma ser 0**, não usar (ver `04-precos-ofertas.md`) |

@@ -155,9 +155,12 @@ JOIN tipospgto tp ON pag.tipospgto_id = tp.tipospgto_id
 ## Conferência de caixa — `conf_caixa_loja` e `status_conf`
 
 - **`conf_caixa_loja`** — a conferência interna do caixa, feita por alguém da farmácia. Dela sai o
-  **`status_conf`** com os valores **`P` / `E` / `F` / `X`** (o significado exato de cada letra não
-  está documentado na fonte — **incerto**; `F` e `X` são os estados considerados "conferido" em
-  cálculos de premiação). Também tem `usuario_conf` (quem fez a conferência física).
+  **`status_conf`**. Também tem `usuario_conf` (quem fez a conferência física).
+  - **Valores comprovados: `F` e `X`** — são os dois estados tratados como "caixa já conferido"
+    (`status_conf IN ('F','X')` é o filtro usado para separar caixas conferidos).
+  - **O significado de cada letra e o conjunto completo de valores possíveis são desconhecidos.**
+    Não existe evidência de outros valores; não inventar letras. Para levantar numa base real:
+    `SELECT status_conf, COUNT(*) FROM conf_caixa_loja GROUP BY status_conf`.
 - Um caixa pode ter mais de uma conferência — a regra usada é pegar a **conferência mais recente
   não-apagada** daquele caixa (subquery de `conf_caixa_loja_id`).
 - **`conf_caixa_loja_tipospgto`** — o detalhe da conferência **por forma de pagamento**:
@@ -232,12 +235,37 @@ por `caixas_id`.
 - **Positivo = "Faltou"** · **Negativo = "Sobrou"** — em toda a cadeia (diferença calculada, valor
   original de auditoria, valor ajustado).
 - `diferenca = valor_computado - valor_apurado` preserva essa convenção.
-- "Fechou certo" = diferença exatamente `0` (na prática, `|valor| < 0,005`).
+- **"Fechou certo" não é diferença exatamente zero** — ver a regra vigente logo abaixo.
 - Qualquer soma/subtração monetária feita fora do SQL deve ser **arredondada para 2 casas**
   (`Math.round(v * 100) / 100`) antes de exibir num campo editável ou persistir — somar valores
   `Decimal`/string do MariaDB convertidos para número gera ruído de ponto flutuante clássico
   (ex.: `9,940000000000055`). A formatação de exibição mascara o problema em alguns lugares e não
   em outros.
+
+### "Caixa certo" / "caixa errado" — regra vigente (mudou em 2026-07-22)
+
+> **Regra antiga, revogada:** até 2026-07-22 um caixa era considerado "fechou certo" quando o valor
+> ajustado dava exatamente R$ 0,00. **Essa definição por valor exato foi substituída** e não deve
+> mais ser usada. (O limiar `|valor| < 0,005` que às vezes aparece associado a ela é outra coisa:
+> é a regra de **exibição** de um item de correção de valor R$ 0,00 — mostrado como caso neutro,
+> em cinza, sem rótulo "Reduz"/"Aumenta". Não serve como critério de fechamento.)
+
+Regra vigente, usada tanto na coluna "Caixa Errado" quanto no cálculo de premiação:
+
+| Situação do caixa | Resultado |
+| --- | --- |
+| Tem ajuste de auditoria ativo com item cujo motivo está marcado **"caixa considerado como certo"** | **Certo** — é a única forma de afirmar "certo". Tem prioridade sobre tudo, inclusive sobre a tolerância |
+| Tem qualquer outro ajuste de auditoria ativo | **Errado** (qualquer motivo, qualquer valor de correção) |
+| Sem ajuste ativo, mas `ABS(diferença) ≥ tolerância de erro` | **Errado** |
+| Sem ajuste ativo e diferença dentro da tolerância | **Indefinido** — fica vazio, **nunca** "certo" |
+
+Dois pontos que fazem a diferença na prática:
+
+- **"Sem problema detectado" não é o mesmo que "certo".** A coluna só rastreia problema; escrever
+  "Não"/"certo" nesse caso sugeriria uma confirmação que ninguém deu.
+- **O critério de exceção é sempre o motivo marcado, nunca o valor apurado.** Motivos são
+  registros editáveis; casar por um **flag no banco** (ou pelo id do motivo), nunca comparando o
+  texto do motivo contra uma lista fixa no código — renomear o motivo quebra a regra em silêncio.
 
 ---
 
@@ -264,27 +292,35 @@ banco da aplicação, ao lado do valor do ERP:
 
 ## Tolerâncias de negócio
 
-Dois limites **independentes**, por filial, que coexistem — nunca usar um no lugar do outro:
+> **Nada aqui é coluna nem parâmetro do ERP Big.** São regras de negócio de uma aplicação de
+> auditoria, configuradas **por filial e por cliente**. O que se reaproveita é a **estrutura**; os
+> valores concretos abaixo são de **uma** instalação e precisam ser confirmados com cada cliente.
 
-| Parâmetro | Padrão | Para que serve |
+O padrão estrutural que vale a pena copiar: **duas tolerâncias independentes que coexistem** —
+nunca usar uma no lugar da outra.
+
+| Parâmetro | Padrão numa instalação | Para que serve |
 | --- | --- | --- |
-| `tolerancia_erro_percentual` | **R$ 1,70** | Decide se um caixa conta como **"caixa errado"** (% de acerto do operador, % de diferença do gerente, coluna "Caixa Errado"). Vale **em módulo** — falta **ou** sobra ≥ esse valor conta como erro |
-| `tolerancia_desconto_caixa` | **R$ 0,76** | Decide o **desconto em folha** do operador de caixa e os totais "Apurado". Só vale para **falta**; sobra nunca desconta. Falta ≥ o limite desconta o **valor total** da diferença (não só o excedente); sobra de um caixa **nunca compensa** falta de outro (sem netting no período) |
+| `tolerancia_erro_percentual` | R$ 1,70 | Decide se um caixa conta como **"caixa errado"** (% de acerto do operador, % de diferença do gerente, coluna "Caixa Errado"). Vale **em módulo** — falta **ou** sobra ≥ esse valor conta como erro |
+| `tolerancia_desconto_caixa` | R$ 0,76 | Decide o **desconto em folha** do operador de caixa e os totais "Apurado". Só vale para **falta**; sobra nunca desconta. Falta ≥ o limite desconta o **valor total** da diferença (não só o excedente); sobra de um caixa **nunca compensa** falta de outro (sem netting no período) |
 
-> Esses parâmetros são configuração de negócio mantida fora do ERP (por filial), não colunas do
-> ERP. Ao criar qualquer cálculo novo, decidir explicitamente: "isso é sobre **status de erro**
-> (R$ 1,70) ou sobre **dinheiro real apurado** (R$ 0,76)?" — não existe tolerância única.
+> Ao criar qualquer cálculo novo, decidir explicitamente: "isso é sobre **status de erro** ou sobre
+> **dinheiro real apurado**?" — não existe tolerância única para a tela inteira. Usar a errada
+> produz um número plausível e sistematicamente errado.
 
-Regras associadas de premiação (todas configuráveis, nada hardcoded):
+Regras associadas de premiação — **exemplo de uma instalação**, todas configuráveis, nada
+hardcoded:
 
 | Faixa | Percentual de acerto | Premiação |
 | --- | --- | --- |
-| Faixa 1 | de `faixa1_percentual_min` a `faixa1_percentual_max` (padrão 90,00% a 99,99%) | `faixa1_valor_premio` (padrão R$ 70,00) |
-| Faixa 2 | ≥ `faixa2_percentual_min` (padrão 100,00%) | `faixa2_valor_premio` (padrão R$ 100,00) |
+| Faixa 1 | de `faixa1_percentual_min` a `faixa1_percentual_max` (ex.: 90,00% a 99,99%) | `faixa1_valor_premio` (ex.: R$ 70,00) |
+| Faixa 2 | ≥ `faixa2_percentual_min` (ex.: 100,00%) | `faixa2_valor_premio` (ex.: R$ 100,00) |
 
-Abaixo do mínimo da Faixa 1, nenhuma premiação. O **gerente não tem faixa/meta configurável** —
-só o "% Diferença" (caixas errados ÷ total de caixas da filial), exibido sem meta.
+Abaixo do mínimo da Faixa 1, nenhuma premiação. Naquele cliente o **gerente não tem faixa/meta
+configurável** — só o "% Diferença" (caixas errados ÷ total de caixas da filial), exibido sem meta.
 
-**Papéis (Gestor x Operador de Caixa)** vêm da convenção `usuario.num_carteira` = `GESTOR` /
-`OPERADOR CAIXA` (ver `01-visao-geral.md`), e a vinculação por período (com transferência entre
-filiais) é mantida fora do ERP, com o nome sempre resolvido ao vivo em `usuario.nome`.
+**Papéis (gerente x operador de caixa):** o operador de um caixa é `caixas.usuario_id` → `usuario`
+(isso é do ERP). Já *marcar* quem é gerente e quem é operador não existe no ERP — quando um cliente
+faz isso pelo campo livre `usuario.num_carteira`, é convenção dele (ver `01-visao-geral.md`,
+"Exemplo de uma instalação"). A vinculação por período (com transferência entre filiais) é mantida
+fora do ERP, com o nome sempre resolvido ao vivo em `usuario.nome`.

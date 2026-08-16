@@ -1,6 +1,12 @@
-# Glossário — vocabulário do gestor ↔ técnico
+# Glossário — vocabulário de quem usa o ERP ↔ técnico
 
-Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`.
+Termos como o gestor/usuário do ERP fala, e o que significam no banco (normalmente chamado
+`gerente` — confirmar com `SHOW DATABASES`).
+
+> **Vocabulário varia por cliente.** Nomes comerciais (programa de fidelidade, apelido de loja),
+> ids de filial e parâmetros de negócio mudam de rede para rede. Aqui ficam os termos e a coluna
+> correspondente; os valores concretos de uma instalação estão em `01-visao-geral.md`,
+> "Exemplo de uma instalação".
 
 ## Caixa e financeiro
 
@@ -19,15 +25,15 @@ Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`
 | **"Computado"** | `conf_caixa_loja_tipospgto.valor_computado` (o que o sistema esperava) |
 | **"Faltou"** | Diferença **positiva** |
 | **"Sobrou"** | Diferença **negativa** |
-| **"Fechou certo"** | Diferença exatamente 0 (`\|valor\| < 0,005`) |
-| **"Conferência do caixa"** | `conf_caixa_loja` (+ detalhe por forma em `conf_caixa_loja_tipospgto`); status em `status_conf` (`P`/`E`/`F`/`X` — significado exato não documentado) |
+| **"Fechou certo"** | **Não é diferença exata.** Desde 2026-07-22 só é "certo" o caixa com ajuste de auditoria cujo motivo está marcado "caixa considerado como certo"; sem ajuste e dentro da tolerância o status fica **indefinido**, nunca "certo" (ver `06-financeiro-caixa.md`) |
+| **"Conferência do caixa"** | `conf_caixa_loja` (+ detalhe por forma em `conf_caixa_loja_tipospgto`); status em `status_conf` — só `F` e `X` estão comprovados ("conferido"), os demais valores possíveis são **desconhecidos** |
 | **"Quem conferiu"** | `conf_caixa_loja.usuario_conf` |
 | **"Forma de pagamento"** | `pagamentos.tipospgto_id` → `tipospgto.descricao` (`1` = DINHEIRO) |
 | **"Fiado" / "Crediário"** | `movment.oper = 9`; forma `CREDIARIO` em `tipospgto` |
 | **"Troco a levar"** (entrega) | `pagamentos.troco_entrega = 'S'` com valor negativo (pendente); zera na confirmação da chegada |
-| **"Gestor" / "Gerente da filial"** | `usuario` com `num_carteira = 'GESTOR'` (convenção manual); a vinculação por período é mantida fora do ERP |
-| **"Operador de caixa"** | `caixas.usuario_id` → `usuario.nome`; papel marcado por `num_carteira = 'OPERADOR CAIXA'` |
-| **"Caixa errado"** | Caixa com diferença (em módulo) ≥ tolerância de erro (padrão R$ 1,70), ou com ajuste de auditoria ativo |
+| **"Gestor" / "Gerente da filial"** | **Não existe no ERP.** Alguns clientes marcam o papel no campo livre `usuario.num_carteira`; a vinculação por período é mantida fora do ERP |
+| **"Operador de caixa"** | `caixas.usuario_id` → `usuario.nome` (isso é do ERP); *marcar* o papel é convenção do cliente |
+| **"Caixa errado"** | Caixa com diferença (em módulo) ≥ a tolerância de erro configurada pelo cliente, ou com ajuste de auditoria ativo |
 
 ## Vendas
 
@@ -54,16 +60,16 @@ Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`
 | **"Remanejo"** | `movment.oper = 10` com `transferencia.remanejamento_id > 0` (pedido feito pela tela de compras) |
 | **"De filial" / "Para filial"** | `transferencia.defilial_id` / `transferencia.parafilial_id` |
 | **"Entrada"** | `movment.E_S = 'E'` com `entradas_id` preenchido (o campo `estoque` é o saldo **antes**) |
-| **"Marca própria"** | `produto.espec_id = 257001` — "SUPRA ENERGY" |
+| **"Marca própria"** | `produto.espec_id` correspondente à marca própria da rede — **o valor é cadastro do cliente**, conferir na base |
 | **"Tele" / "Tele-entrega"** | `movment.entrega = 'S'`; entra no relatório só com `dtchegada_entrega` preenchido |
 
 ## Loja WhatsApp
 
 | O gestor diz | Significado técnico |
 | --- | --- |
-| **"Loja WhatsApp"** | Não é filial. Vendas da **FILIAL 10 (`filial_id = 14`)** com `orcament.msgcaixa` ∈ (`wt`,`wr`,`ct`,`cr`) normalizado, `orcament.status IN ('F','N')`, `numlanc <> 0`, com 2 dias de folga na busca do orçamento |
-| **"F 10 - WHATS"** | Recorte **diferente**, mais antigo: só `msgcaixa LIKE '%WT%'` |
-| **"F 10 - L. FISICA"** | O complemento da FILIAL 10 (venda física), nos relatórios que separam os dois recortes |
+| **"Loja WhatsApp"** | Não é filial. Vendas de uma filial de origem definida pelo cliente, com `orcament.msgcaixa` **normalizado** batendo com os códigos combinados naquela rede, `orcament.status IN ('F','N')`, `numlanc <> 0`, com 2 dias de folga na busca do orçamento. Filial e códigos: confirmar na base |
+| Recorte **legado** de venda por WhatsApp | Só `msgcaixa LIKE '%<código>%'` — sem os demais códigos, sem folga de 2 dias, sem filtro de `status`. É **outro** recorte, não substituto |
+| Complemento ("venda física" da mesma filial) | O que sobra da filial de origem depois de tirar o recorte de WhatsApp, nos relatórios que separam os dois |
 
 ## Produto e estoque
 
@@ -89,7 +95,7 @@ Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`
 | O gestor diz | Significado técnico |
 | --- | --- |
 | **"Preço de tabela" / "Preço de venda"** | `grupo_preco_produto.preco_vnd` (fonte de verdade) |
-| **"Clube do Pedrinho" / "Desconto à vista"** | `grupo_preco_produto.desconto` (%), aplicado sobre `preco_vnd` |
+| **"Desconto à vista"** (cada rede tem um nome comercial próprio para o programa de fidelidade) | `grupo_preco_produto.desconto` (%), aplicado sobre `preco_vnd` — o nome comercial não existe no banco |
 | **"Promoção" / "Promoção por data"** | `grupo_preco_produto.preco_pro`, válida entre `dtiniciopromocao` e `valid_pro` |
 | **"Preço da filial" / "Oferta da loja"** | `precosfilial.preco_promo`, válido entre `inicio_promocao` e `final_promocao` — **prioridade máxima** |
 | **"Caderno de Ofertas"** | Recorte de produtos em oferta (relatório); usa a mesma hierarquia de preço |
@@ -100,22 +106,22 @@ Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`
 | --- | --- |
 | **"Cliente"** (pessoa) | CPF normalizado (11 dígitos, sem sequência repetida) — **não** `clientes_id`, que é o cadastro |
 | **"Cadastro duplicado"** | Vários `clientes_id` com o mesmo `clientes.cpf` |
-| **"Etiqueta RFV" / "Segmento"** | Um dos 11 segmentos derivados de Recência/Frequência/Valor (Campeão, Fidelizado, Promissor, Potencial para ser fidelizado, Recente, Em risco, Não pode perder, Precisa de atenção, Quase hibernando, Hibernando, Perdido) |
+| **"Etiqueta RFV" / "Segmento"** | Calculado fora do ERP. Um dos 11 segmentos derivados de Recência/Frequência/Valor (Campeão, Fidelizado, Promissor, Potencial para ser fidelizado, Recente, Em risco, Não pode perder, Precisa de atenção, Quase hibernando, Hibernando, Perdido) |
 | **"Dias sem comprar"** | Recência (dias desde a última compra) |
-| **"Fiel"** | Tempo de relacionamento ≥ 180 dias, ≥ 4 vendas em 6 meses, recência ≤ 60 dias, gasto 6 meses ≥ R$ 300 (limiares configuráveis) |
-| **"Potencial"** | Recência ≤ 45 dias e gasto 6 meses ≥ R$ 200 (só se não for Fiel) |
+| **"Fiel"** | Regra derivada, **fora do ERP**. Limiares de uma instalação (configuráveis): relacionamento ≥ 180 dias, ≥ 4 vendas em 6 meses, recência ≤ 60 dias, gasto 6 meses ≥ R$ 300 |
+| **"Potencial"** | Regra derivada, **fora do ERP**. Limiares de uma instalação: recência ≤ 45 dias e gasto 6 meses ≥ R$ 200 (só se não for Fiel) |
 | **"Loja favorita" / "Vendedor favorito"** | Maior número de transações (`filial_id` / `usuario_id`), desempate por valor gasto |
 
 ## Estrutura e organização
 
 | O gestor diz | Significado técnico |
 | --- | --- |
-| **"Filial"** | `filial.reduz` (nome abreviado) + `filial_id`; `1` = ESCRITORIO e `999` = técnico, sempre excluídos |
-| **"MATRIZ"** | `filial_id = 2` |
-| **"Rede"** | Todas as filiais operacionais (todas exceto `filial_id = 1`) — 11 filiais |
+| **"Filial"** | `filial.reduz` (nome abreviado) + `filial_id`; `1` costuma ser o escritório e `999` é registro técnico, ambos sempre excluídos |
+| **"MATRIZ"** | Um valor de `filial.reduz`; o `filial_id` correspondente **varia por cliente** — resolver com `SELECT filial_id, reduz FROM filial WHERE apagado='N'` |
+| **"Rede"** | Todas as filiais operacionais (`filial` com `apagado='N'`, menos `1` e `999`); a quantidade é dado da instalação |
 | **"Relatório do ERP"** | Linha da tabela `relatorio` (`descricao`, `finalidade`, `sql`, `parametros`) |
 | **"Usuário" / "Operador"** | `usuario` (`usuario_id`, `nome`, `filial_id`, `num_carteira`, `status`, `apagado`) |
-| **"Número da Carteira"** | `usuario.num_carteira` — texto livre usado por convenção para marcar `GESTOR` / `OPERADOR CAIXA` |
+| **"Número da Carteira"** | `usuario.num_carteira` — **texto livre sem semântica no ERP**; se um cliente o usa para marcar papel, é convenção dele |
 | **"Apagado"** | Soft delete (`apagado = 'S'`) — o registro continua na tabela |
 
 ## Termos sem base documentada (lacunas)
@@ -126,5 +132,5 @@ Termos como o gestor/usuário do ERP fala, e o que significam no banco `gerente`
 | **Farmácia Popular** | Aparece só como `motivo_alteracao = 'popular'` em `conf_caixa_loja_tipospgto`; **sem tabela dedicada documentada** |
 | **SNGPC / controlados** | **Nenhuma** tabela documentada na fonte |
 | **Convênio** | **Nenhuma** tabela documentada na fonte (o mais próximo é o crediário, `oper = 9`) |
-| **`status_conf` (`P`/`E`/`F`/`X`)** | Valores conhecidos, significado de cada letra **não documentado** (`F`/`X` = conferido, nos cálculos de premiação) |
+| **`status_conf`** | Só `F` e `X` estão comprovados (= conferido). O significado das letras e **quais outros valores existem** são desconhecidos — levantar com `SELECT status_conf, COUNT(*) FROM conf_caixa_loja GROUP BY status_conf` |
 | **Demais valores de `movment.oper`** | Só `2`, `3`, `8`, `9`, `10` estão documentados; existem outros |

@@ -13,6 +13,37 @@ Sumário por área:
 - [Cliente](#cliente)
 - [Performance](#performance)
 - [Camada de aplicação (BigInt, fuso, SQL dinâmico)](#camada-de-aplicação-bigint-fuso-sql-dinâmico)
+- [Escrita e replicação](#escrita-e-replicação)
+
+---
+
+## Escrita e replicação
+
+### 0. `UPDATE`/`INSERT` sem `lojas_leram = '*'` — a alteração nunca chega à loja
+
+- **Sintoma:** o registro é alterado com sucesso, a retaguarda mostra o valor novo, e a loja
+  continua operando com o valor antigo por tempo indeterminado. Chega como "mudei no sistema e o
+  caixa continua cobrando o preço velho", normalmente horas ou dias depois da alteração.
+- **Causa:** o ERP Big é distribuído entre retaguarda e lojas, e a replicação é controlada pela
+  coluna `lojas_leram` **na própria linha alterada** — ela marca quais lojas já leram o registro.
+  Uma escrita que não mexe nessa coluna deixa a linha marcada como "já lida por todos", então o
+  mecanismo de comunicação simplesmente não a envia.
+- **Correção:** marcar `lojas_leram = '*'` (nenhuma loja leu ainda) **na mesma operação** de
+  escrita — inclusive em soft delete:
+
+  ```sql
+  UPDATE grupo_preco_produto
+  SET    preco_vnd   = 105.24,
+         lojas_leram = '*'
+  WHERE  produto_id = 12345 AND grupo_preco_id = 7;
+  ```
+
+- **Como evitar:** tratar `lojas_leram = '*'` como parte obrigatória de qualquer `INSERT`,
+  `UPDATE` ou `apagado='S'`, nunca como um segundo passo (um `UPDATE` separado abre janela em que
+  parte das linhas propaga e parte não). Ao revisar script de escrita alheio, procurar essa coluna
+  antes de qualquer outra coisa: é a omissão mais frequente e a de sintoma mais tardio, o que torna
+  o diagnóstico caro. Se a tabela for incomum, confirmar que ela tem a coluna:
+  `SHOW COLUMNS FROM <tabela> LIKE 'lojas_leram';`
 
 ---
 
@@ -274,7 +305,8 @@ Sumário por área:
 - **Causa:** `pagamentos.troco_entrega = 'S'` marca troco **pendente**; ao confirmar a chegada
   (`dtchegada_entrega`), o ERP grava a **reversão** (`+26.00, troco_entrega='S'`) que zera o
   `SUM(...WHERE troco_entrega='S')`, mais as duas linhas reais com `troco_entrega='N'`
-  (`+150.00` recebido e `−26.00` troco dado). Lançamento real: 889722, FILIAL 6, 2026-07-23.
+  (`+150.00` recebido e `−26.00` troco dado). Lançamento real: 889722, "Filial 9" (nome como
+  registrado na fonte, não confirmado se é `reduz` ou `filial_id`), 2026-07-23.
 - **Correção:** usar o **maior** entre (a) pendente `ABS(SUM(valor) WHERE troco_entrega='S')`
   quando negativo e (b) liquidado
   `GREATEST(0, SUM(valor) WHERE tipospgto_id=1 AND troco_entrega='N' AND valor>0) - valor_tot_da_venda`.
@@ -350,20 +382,7 @@ Sumário por área:
   `timeZone: "America/Sao_Paulo"`; nunca validar fuso só em máquina local (que já está no fuso
   certo e mascara o bug).
 
-### 29. `hour12: false` sobrescrevendo `hourCycle: "h23"`
-
-- **Sintoma:** a coluna "Diferença Fechamento" saía em branco em produção só para caixas
-  específicos (ex.: 55803 e 55793 da MATRIZ) — os que fecham entre 00:00 e 00:59.
-- **Causa:** a data era montada como texto para embutir na query; em certas builds de Node/ICU a
-  meia-noite é formatada como `"24"` em vez de `"00"`, sem ajustar o dia → `'2026-07-21 24:59:19'`,
-  data inválida, `BETWEEN` não casa nada.
-- **Correção que falhou:** acrescentar `hourCycle: "h23"` **mantendo** `hour12: false` — pela spec
-  ECMA-402 o `hour12` tem precedência e anula o `hourCycle`.
-- **Correção definitiva:** remover `hour12` por completo, deixar **só** `hourCycle: "h23"` — em
-  **todas** as cópias da função no módulo.
-- **Como evitar:** nunca escrever `hour12` e `hourCycle` juntos.
-
-### 30. Helper de composição de SQL do ORM contra o cliente do ERP
+### 29. Helper de composição de SQL do ORM contra o cliente do ERP
 
 - **Sintoma:** busca de nomes em lote retornava **1 nome entre 7 IDs pedidos**, sem erro nem log.
 - **Causa:** o cliente do ERP é um wrapper sobre o driver MySQL que trata cada `${...}` como **um
@@ -376,7 +395,7 @@ Sumário por área:
   atenção: o mesmo padrão `${lista.join(",")}` dentro de um **tagged template** (`$queryRaw`, não
   `Unsafe`) tem o mesmo bug — filtra silenciosamente só pelo primeiro item.
 
-### 31. Funções de outro dialeto no SQL
+### 30. Funções de outro dialeto no SQL
 
 - **Sintoma:** erro 500 só em produção; funcionava localmente.
 - **Causa:** uso de `TYPEOF`/`datetime()` (exclusivas do SQLite) num SQL que, em produção, roda

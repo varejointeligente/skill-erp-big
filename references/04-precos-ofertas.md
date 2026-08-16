@@ -26,10 +26,15 @@ COALESCE(NULLIF(gpp.preco_vnd, 0), ROUND(p.preco_cmp_un * (1 + p.margem / 100), 
 
 ---
 
-## 2. Desconto à vista ("Clube do Pedrinho") — `grupo_preco_produto.desconto`
+## 2. Desconto à vista / programa de fidelidade — `grupo_preco_produto.desconto`
 
 O percentual de desconto à vista vem de **`grupo_preco_produto.desconto`** — **não** de
 `produto.desconto_avista` (esse campo costuma ser `0`).
+
+> Cada rede costuma vender esse desconto sob um **nome comercial próprio** (clube, cartão,
+> programa de fidelidade). Esse nome **não existe no banco** — no ERP é sempre
+> `grupo_preco_produto.desconto`. Ao falar com o cliente, usar o nome dele; ao escrever SQL ou
+> documentação, usar a coluna.
 
 **Fórmula:**
 
@@ -76,7 +81,7 @@ END AS preco_final
 Não somar, não combinar, não mostrar os dois. A promoção por data tem prioridade total sobre o
 desconto à vista enquanto estiver dentro do período válido.
 
-| Situação | Preço exibido | Clube do Pedrinho |
+| Situação | Preço exibido | Desconto à vista |
 | --- | --- | --- |
 | Só `preco_vnd` (sem mais nada) | `preco_vnd` | — |
 | Promoção por data **ativa** | `preco_pro` | — (ignorar desconto à vista) |
@@ -122,7 +127,7 @@ WITH grupo_padrao AS (
 | Coluna | Papel |
 | --- | --- |
 | `preco_vnd` | Preço de tabela da rede — **fonte de verdade do preço de venda** |
-| `desconto` | Percentual de desconto à vista (Clube do Pedrinho) |
+| `desconto` | Percentual de desconto à vista (o "programa de fidelidade" do cliente, qualquer que seja o nome comercial) |
 | `preco_pro` | Preço da promoção por data (já calculado) |
 | `dtiniciopromocao` | Início da promoção por data |
 | `valid_pro` | Fim da promoção por data |

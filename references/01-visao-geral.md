@@ -1,18 +1,27 @@
 # ERP Big — Visão Geral e Convenções
 
-O **ERP Big** (também chamado **BigPharma** / **Big Sistemas**) é o ERP usado por uma rede de
-farmácias. Todo o dado operacional (vendas, produtos, estoque, preços, clientes, caixa,
-financeiro) vive num banco **MariaDB**, base **`gerente`**.
+O **ERP Big** (também chamado **BigPharma** / **Big Sistemas**) é um ERP de varejo farmacêutico
+usado por redes de farmácia. Todo o dado operacional (vendas, produtos, estoque, preços, clientes,
+caixa, financeiro) vive num banco **MariaDB**, cuja base normalmente se chama **`gerente`**.
+
+> **O nome da base pode variar por instalação.** `gerente` é o nome usual do ERP Big, mas não é
+> garantido — confirmar com `SHOW DATABASES;` antes de assumir.
 
 > Todo acesso descrito aqui é **somente leitura**. Nunca existe caminho de escrita no ERP —
 > qualquer correção/auditoria feita por sistemas externos vive fora dele (no banco da própria
 > aplicação), nunca sobrepondo o dado do ERP.
 
+> **Universal x específico do cliente.** Este arquivo descreve o ERP Big em geral. Ids de filial,
+> nomes comerciais, apelidos de campo livre e parâmetros de negócio **mudam de cliente para
+> cliente** — o que é específico de uma instalação está isolado em
+> [Exemplo de uma instalação](#exemplo-de-uma-instalação-confirmar-na-base-do-cliente), e vale só
+> como ilustração de formato.
+
 ## Índice dos arquivos de referência
 
 | Arquivo | Conteúdo |
 | --- | --- |
-| `01-visao-geral.md` | Este arquivo: convenções gerais, flags, filiais, valores sentinela, tabela `relatorio` |
+| `01-visao-geral.md` | Este arquivo: convenções gerais, flags, filiais, valores sentinela, tabela `relatorio`, exemplo de uma instalação |
 | `02-vendas-movment.md` | `movment`, `oper`, cupons, devoluções, transferência/remanejo, entradas, fórmulas de faturamento/custo/margem |
 | `03-produto-estoque.md` | `produto`, `barras`, `grupo`, `classe_terapeutica`, `fabricantes`, estoques, lotes, curva ABC, demanda, suspensão de compra |
 | `04-precos-ofertas.md` | Hierarquia de preço, `grupo_preco_produto`, `precosfilial`, promoções, desconto à vista |
@@ -71,7 +80,7 @@ WHERE (cx.filial_id, cx.caixas_id) IN ((2,24653),(4,24653),(6,24653))
 
 | Onde | Valor sentinela | O que fazer |
 | --- | --- | --- |
-| `filial_id` | `1` (ESCRITORIO) e `999` (registro técnico, nome nulo) | `mov.filial_id NOT IN (1, 999)` em toda query de venda |
+| `filial_id` | `1` (costuma ser o escritório) e `999` (registro técnico, nome nulo) | `mov.filial_id NOT IN (1, 999)` em toda query de venda |
 | `produto.descricao` | contém `ARREDOND` | excluir sempre de faturamento/clientes/IPC/qualquer KPI — é produto de ajuste de troco |
 | `clientes.dtcadastro` | `1000-01-01` (4.294 clientes) | tratar qualquer data anterior a `1990-01-01` como ausente/`NULL` |
 | `lote_novo.validade` | datas absurdas | filtrar `ln.validade < '2100-01-01'` |
@@ -83,31 +92,30 @@ WHERE (cx.filial_id, cx.caixas_id) IN ((2,24653),(4,24653),(6,24653))
 > Regra geral: **nunca assumir que uma data do ERP é plausível.** Colunas de data sem constraint
 > de mínimo conhecida podem trazer sentinelas de migração. Aplicar guarda de faixa sempre.
 
-### Filiais cadastradas no ERP
+### Filiais — o que é do ERP e o que é do cliente
 
-| filial_id | reduz | Observação |
-| --- | --- | --- |
-| 1 | ESCRITORIO | Não é filial de venda — excluir sempre das queries |
-| 2 | MATRIZ | Filial principal |
-| 3 | FILIAL 1 | |
-| 4 | FILIAL 2 | |
-| 5 | FILIAL 3 | |
-| 6 | FILIAL 4 | |
-| 8 | FILIAL 5 | |
-| 9 | FILIAL 6 | |
-| 11 | FILIAL 7 | |
-| 12 | FILIAL 8 | |
-| 13 | FILIAL 9 | |
-| 14 | FILIAL 10 | Filial das vendas "Loja WhatsApp" (ver `05-clientes-crm.md`) |
-| 15 | FILIAL 11 | |
-| 999 | (nulo) | Registro técnico — excluir sempre das queries |
+**A lista de filiais é sempre específica da instalação** — quantidade, ids e nomes mudam de
+cliente para cliente. Nunca reproduzir um mapa de filiais de memória; obter do banco:
 
-- **Atenção:** `filial_id = 12` é FILIAL 8 e `filial_id = 13` é FILIAL 9 — a numeração do nome
-  **não** acompanha o id.
+```sql
+SELECT filial_id, reduz FROM filial WHERE apagado = 'N' ORDER BY filial_id;
+```
+
+O que é convenção do ERP, e vale em qualquer instalação:
+
+- **`filial_id = 1` costuma ser o escritório** (não é filial de venda) e **`filial_id = 999` é um
+  registro técnico** (nome nulo). Os dois saem de toda query de venda:
+  `mov.filial_id NOT IN (1, 999)`.
+- **"Rede" / "filiais operacionais"** = as linhas de `filial` com `apagado = 'N'` menos esses dois
+  sentinelas. O número de filiais operacionais é dado da instalação — contar, não decorar.
 - **Nome de filial em relatórios:** usar sempre o nome abreviado **`filial.reduz`** (máx. 11
   chars). Não prefixar com `filial_id` na exibição. Para nome completo existem `filial.nome`
   (com razão social), `filial.psi_nomest` e `filial.menstit`.
-- São **11 filiais operacionais** (todas exceto `filial_id = 1`).
+- **O nome em `reduz` não acompanha o `filial_id`.** É comum uma rede ter `filial_id = 12` com
+  `reduz = 'FILIAL 8'`. Traduzir id ↔ nome sempre pela tabela, nunca por aritmética.
+
+Um mapa concreto, só como ilustração de formato, está em
+[Exemplo de uma instalação](#exemplo-de-uma-instalação-confirmar-na-base-do-cliente).
 
 ### Tabela `filial`
 
@@ -129,18 +137,15 @@ Cadastro da tela "Usuários" do sistema.
 | `usuario_id` | PK |
 | `nome` | Nome do operador |
 | `filial_id` | Filial de lotação |
-| `num_carteira` | Campo "Número da Carteira" — texto livre, mas usado por **convenção manual do gestor** para marcar papel: valor exato `GESTOR` ou `OPERADOR CAIXA` |
+| `num_carteira` | Campo "Número da Carteira" — **texto livre**, sem semântica própria no ERP |
 | `apagado` | `'S'`/`'N'` |
 | `status` | `'S'`/`'N'` (ativo) |
 
-Consulta usada para sugerir papéis por filial:
-
-```sql
-SELECT usuario_id, nome, filial_id
-FROM usuario
-WHERE UPPER(TRIM(num_carteira)) = 'GESTOR'      -- ou = 'OPERADOR CAIXA'
-  AND apagado = 'N' AND status = 'S'
-```
+> **`num_carteira` não tem significado definido pelo ERP.** É um campo livre; se um cliente o usa
+> para marcar papel de funcionário, isso é convenção manual daquela instalação (e pode estar vazio
+> ou com outro conteúdo em outra rede). Antes de tratá-lo como papel, olhar que valores existem:
+> `SELECT DISTINCT num_carteira FROM usuario WHERE apagado='N'`. Um exemplo de convenção real está
+> em [Exemplo de uma instalação](#exemplo-de-uma-instalação-confirmar-na-base-do-cliente).
 
 > Não guardar snapshot do nome do usuário em sistemas externos — buscar sempre ao vivo no ERP,
 > para não ficar desatualizado se o funcionário mudar de nome.
@@ -215,6 +220,48 @@ Colunas úteis: `tabela`, `campo`, `chavepri`, `filial_id`, `valor_ant`, `valor_
 
 ---
 
+## Replicação entre loja e retaguarda — `lojas_leram`
+
+O ERP Big é distribuído: a base central e as bases das lojas trocam alterações entre si. O
+controle dessa troca vive na própria linha alterada, na coluna **`lojas_leram`** — ela marca quais
+lojas já leram aquele registro. Enquanto a linha estiver marcada como já lida por todo mundo, o
+mecanismo de comunicação não a envia de novo.
+
+**Por isso, toda escrita direta no banco — `INSERT`, `UPDATE` ou soft delete via `apagado='S'` —
+precisa marcar `lojas_leram = '*'` na mesma operação.** O `*` significa "nenhuma loja leu ainda",
+e é o que faz a alteração ser propagada.
+
+```sql
+UPDATE grupo_preco_produto
+SET    preco_vnd  = 105.24,
+       lojas_leram = '*'          -- sem isto, a loja nunca recebe a alteração
+WHERE  produto_id = 12345
+  AND  grupo_preco_id = 7;
+```
+
+A falha aqui é silenciosa e cara de diagnosticar: **o `UPDATE` retorna sucesso, a retaguarda mostra
+o valor novo, e a loja continua operando com o valor antigo indefinidamente.** Não há erro, não há
+log, e o sintoma chega como "mudei o preço no sistema e o caixa continua cobrando o valor velho" —
+horas ou dias depois, já sem ligação óbvia com a alteração.
+
+Regras práticas:
+
+- Vale para **qualquer** tabela que o ERP replique, não só as de preço. Na dúvida sobre uma tabela
+  específica, confirme se ela tem a coluna antes de escrever:
+  `SHOW COLUMNS FROM <tabela> LIKE 'lojas_leram';`
+- Vale também para exclusão. O ERP faz soft delete — a linha marcada com `apagado='S'` só some da
+  loja se ela for replicada, ou seja, se `lojas_leram` for reposto para `'*'` junto.
+- Numa alteração em lote, inclua a coluna no mesmo `UPDATE`. Um segundo `UPDATE` só para marcar
+  `lojas_leram` deixa uma janela em que parte das linhas propaga e parte não.
+- Ao revisar um script de escrita de outra pessoa, procure `lojas_leram` antes de qualquer outra
+  coisa — é a omissão mais comum e a de sintoma mais tardio.
+
+> 📌 Lacuna: o formato completo aceito por `lojas_leram` (se além de `'*'` ela guarda lista de
+> códigos de loja, e qual o delimitador) ainda não está documentado aqui. Para escrita, o `'*'` é o
+> valor correto; para *interpretar* o conteúdo existente de uma linha, confirmar na base antes.
+
+---
+
 ## Regra de documentação contínua
 
 Sempre que uma tabela, coluna, relacionamento ou padrão de query novo do ERP for descoberto,
@@ -225,3 +272,71 @@ sintoma → causa raiz confirmada (não suposta) → correção → como evitar 
 **Em caso de dúvida sobre regra de negócio, PERGUNTAR antes de inventar.** Definição de métrica,
 escopo de filtro, tipo de agregação (bruto x líquido, cupons x linhas), ordenação padrão e
 comportamento de vazio nunca devem ser chutados.
+
+---
+
+## Exemplo de uma instalação (confirmar na base do cliente)
+
+> **Nada nesta seção é regra do ERP Big.** São valores de **uma** instalação, mantidos só para
+> mostrar o **formato** do dado. Ids, nomes, quantidades e parâmetros mudam de cliente para
+> cliente — sempre consultar o banco do cliente antes de usar qualquer valor daqui.
+
+### Mapa de filiais de uma rede
+
+| filial_id | reduz | Observação |
+| --- | --- | --- |
+| 1 | ESCRITORIO | Não é filial de venda — excluída das queries |
+| 2 | MATRIZ | Filial principal dessa rede |
+| 3 | FILIAL 1 | |
+| 4 | FILIAL 2 | |
+| 5 | FILIAL 3 | |
+| 6 | FILIAL 4 | |
+| 8 | FILIAL 5 | |
+| 9 | FILIAL 6 | |
+| 11 | FILIAL 7 | |
+| 12 | FILIAL 8 | |
+| 13 | FILIAL 9 | |
+| 14 | FILIAL 10 | Filial de origem das vendas "Loja WhatsApp" nessa rede (ver `05-clientes-crm.md`) |
+| 15 | FILIAL 11 | |
+| 999 | (nulo) | Registro técnico — excluído das queries |
+
+Serve para ilustrar dois pontos que se repetem em outras instalações: **há buracos na sequência de
+`filial_id`** (7 e 10 não existem aqui) e **o número no `reduz` não bate com o id** (`filial_id =
+12` é `FILIAL 8`). Nessa instalação são **12 filiais operacionais** (todas exceto `filial_id = 1`)
+— em outro cliente esse número é outro; contar com a query da seção de filiais.
+
+### Convenção de papéis em `usuario.num_carteira`
+
+Nessa instalação o campo livre "Número da Carteira" é preenchido à mão com o texto exato `GESTOR`
+ou `OPERADOR CAIXA` para marcar o papel do funcionário. **É convenção do cliente, não semântica do
+ERP.** Consulta usada ali para sugerir papéis por filial:
+
+```sql
+SELECT usuario_id, nome, filial_id
+FROM usuario
+WHERE UPPER(TRIM(num_carteira)) = 'GESTOR'      -- ou = 'OPERADOR CAIXA'
+  AND apagado = 'N' AND status = 'S'
+```
+
+Em outro cliente o campo pode estar vazio, ter número de carteira de verdade ou usar outros
+rótulos — verificar os valores distintos antes de assumir.
+
+### Marca própria — `produto.espec_id`
+
+`produto.espec_id` é a especificação do produto (isso é do ERP). **Qual `espec_id` corresponde à
+marca própria é cadastro do cliente.** Nessa instalação, `espec_id = 257001` agrupa os produtos da
+marca própria da rede, e a métrica "Marca" dos relatórios é `SUM(quanti_uni)` desses produtos — o
+que ilustra o formato: um único `espec_id` inteiro, não uma lista de descrições.
+
+### Programa de fidelidade / desconto à vista
+
+O percentual gravado em `grupo_preco_produto.desconto` (ver `04-precos-ofertas.md`) é vendido ao
+consumidor sob um **nome comercial próprio de cada rede** ("clube", "cartão", etc.). O nome não
+existe no banco — não procurar por ele, e não usá-lo em documentação genérica.
+
+### Parâmetros de negócio de caixa (fora do ERP)
+
+Tolerâncias e faixas de premiação descritas em `06-financeiro-caixa.md` (R$ 1,70 / R$ 0,76,
+90%–99,99% → R$ 70, ≥ 100% → R$ 100) são **configuração de uma instalação**, mantida fora do ERP.
+O que é reaproveitável é a **estrutura** (duas tolerâncias independentes, faixas por percentual de
+acerto), não os números.
