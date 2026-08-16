@@ -238,7 +238,7 @@ ver `05-clientes-crm.md` e `08-armadilhas.md`.
 ## Descontos: manual x automático
 
 - Desconto genérico da linha: `(preco_cad * quanti_uni) - valor_tot`.
-- **Desconto manual** é identificado por `tipo_desc = 'M'`. Num relatório replicado do Pentaho, a
+- **Desconto manual** é identificado por `tipo_desc = 'M'`. Já foi visto relatório em que a
   coluna "Desconto" é definida como **desconto manual (`tipo_desc = 'M'`) ÷ venda bruta** — e
   **não** como `(bruto − líquido) / líquido`. São definições diferentes; confirmar qual vale em
   cada relatório antes de implementar.

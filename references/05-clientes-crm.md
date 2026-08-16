@@ -163,7 +163,7 @@ digitado pelo operador**.
 > `SELECT DISTINCT msgcaixa FROM orcament WHERE msgcaixa <> ''`. O que é universal é o
 > comportamento do campo — texto livre, sujo, que exige normalização.
 
-Regras da consulta de origem (transformação Pentaho/Kettle, replicada e validada):
+Regras da consulta de origem (extração já validada em produção):
 
 - Busca os `numlanc` com **2 dias de folga antes** do início do período (o orçamento pode ter sido
   aberto antes do fechamento da venda).
