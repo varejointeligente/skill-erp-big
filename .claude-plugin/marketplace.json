@@ -1,5 +1,6 @@
 {
   "name": "varejointeligente-big",
+  "description": "Skills do Claude para o ERP Big (BigPharma / Big Sistemas) no varejo farmaceutico.",
   "owner": {
     "name": "Varejo Inteligente",
     "url": "https://github.com/varejointeligente"
