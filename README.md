@@ -9,31 +9,46 @@ alguém pede um relatório, questiona um número ou pergunta "de onde sai esse c
 a responder a partir do que já foi validado contra bancos reais, em vez de deduzir pelo nome das
 colunas.
 
+## Instalar
+
+Este repositório é um plugin do Claude e também o seu próprio marketplace — um comando adiciona,
+outro instala.
+
+**Claude Code:**
+
+```
+/plugin marketplace add varejointeligente/skill-erp-big
+/plugin install erp-big@varejointeligente-big
+```
+
+**Cowork (app desktop):** Customize → Plugins → Add marketplace → cole
+`varejointeligente/skill-erp-big` → Browse plugins → Install.
+
+A skill passa a ser acionada sozinha quando a conversa envolve o ERP Big; não é preciso invocá-la
+pelo nome. Atualizações chegam por `/plugin marketplace update` (ou automaticamente, se o
+auto-update estiver ligado).
+
 ## Conteúdo
 
 ```
-SKILL.md                        instruções e índice das referências
-references/
-  01-visao-geral.md             convenções, flags, PKs compostas, filiais, tabela `relatorio`,
-                                exemplo de uma instalação (valores de cliente, rotulados)
-  02-vendas-movment.md          movment, oper, cupom, devolução, transferência x remanejo
-  03-produto-estoque.md         produto, barras, grupo, estoques, lote/validade, curva ABC
-  04-precos-ofertas.md          hierarquia de preço, promoções, desconto à vista
-  05-clientes-crm.md            clientes, CPF duplicado, RFV, WhatsApp, entrega e troco
-  06-financeiro-caixa.md        caixas, pagamentos, sangria, conferência, tela 302
-  07-consultas-e-performance.md índices, FORCE INDEX, fan-out, BigInt, fuso
-  08-armadilhas.md              catálogo de bugs reais: sintoma → causa → correção → prevenção
-  09-glossario.md               vocabulário do gestor ↔ tabela/coluna/valor
-scripts/
-  consultar_big.py              consulta somente leitura no MariaDB
-```
-
-## Instalar
-
-Empacote e envie o `.skill` para o Claude, ou copie a pasta para o diretório de skills:
-
-```bash
-zip -r erp-big.skill . -x '.git/*'
+.claude-plugin/
+  plugin.json                     metadados do plugin
+  marketplace.json                torna o próprio repositório instalável
+skills/erp-big/
+  SKILL.md                        instruções e índice das referências
+  references/
+    01-visao-geral.md             convenções, flags, PKs compostas, filiais, tabela `relatorio`,
+                                  replicação (`lojas_leram`), exemplo de uma instalação
+    02-vendas-movment.md          movment, oper, cupom, devolução, transferência x remanejo
+    03-produto-estoque.md         produto, barras, grupo, estoques, lote/validade, curva ABC
+    04-precos-ofertas.md          hierarquia de preço, promoções, desconto à vista
+    05-clientes-crm.md            clientes, CPF duplicado, RFV, WhatsApp, entrega e troco
+    06-financeiro-caixa.md        caixas, pagamentos, sangria, conferência, tela 302
+    07-consultas-e-performance.md índices, FORCE INDEX, fan-out, BigInt, fuso
+    08-armadilhas.md              catálogo de bugs reais: sintoma → causa → correção → prevenção
+    09-glossario.md               vocabulário do gestor ↔ tabela/coluna/valor
+  scripts/
+    consultar_big.py              consulta somente leitura no MariaDB
 ```
 
 ## Consultar o banco
@@ -41,8 +56,8 @@ zip -r erp-big.skill . -x '.git/*'
 ```bash
 pip install pymysql
 export BIG_HOST=... BIG_PORT=3306 BIG_USER=usuario_leitura BIG_PASSWORD=... BIG_DATABASE=gerente
-python scripts/consultar_big.py "SELECT filial_id, reduz FROM filial WHERE apagado='N'"
-python scripts/consultar_big.py --tabelas movment
+python skills/erp-big/scripts/consultar_big.py "SELECT filial_id, reduz FROM filial WHERE apagado='N'"
+python skills/erp-big/scripts/consultar_big.py --tabelas movment
 ```
 
 O script abre a sessão em `TRANSACTION READ ONLY` e recusa qualquer comando que não seja leitura.
@@ -84,3 +99,7 @@ mantidos** — é o caso concreto que torna cada armadilha reproduzível e memor
 si é estrutural do ERP. Já os valores de configuração de uma instalação (mapa de filiais,
 tolerâncias, faixas de premiação, `espec_id` de marca própria) estão rotulados como exemplo, não
 como regra.
+
+## Licença
+
+MIT — ver [LICENSE](LICENSE).

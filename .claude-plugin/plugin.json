@@ -1,0 +1,13 @@
+{
+  "name": "erp-big",
+  "description": "Base de conhecimento do ERP Big (BigPharma / Big Sistemas) para varejo farmaceutico: schema MariaDB, consultas validadas, catalogo de armadilhas e regras de escrita.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Varejo Inteligente",
+    "url": "https://github.com/varejointeligente"
+  },
+  "homepage": "https://github.com/varejointeligente/skill-erp-big",
+  "repository": "https://github.com/varejointeligente/skill-erp-big",
+  "license": "MIT",
+  "keywords": ["erp", "farmacia", "varejo", "sql", "claude-skill"]
+}

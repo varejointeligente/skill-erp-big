@@ -1,0 +1,14 @@
+{
+  "name": "varejointeligente-big",
+  "owner": {
+    "name": "Varejo Inteligente",
+    "url": "https://github.com/varejointeligente"
+  },
+  "plugins": [
+    {
+      "name": "erp-big",
+      "source": "./",
+      "description": "Base de conhecimento do ERP Big (BigPharma / Big Sistemas) para varejo farmaceutico: schema MariaDB, consultas validadas, catalogo de armadilhas e regras de escrita."
+    }
+  ]
+}
